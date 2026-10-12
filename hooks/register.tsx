@@ -34,6 +34,8 @@ export const usageOf = (m: Measured, isCloud: boolean): Usage => {
   }
   return { ctx: m.context.percent, session: used('five_hour'), credits: used('spend_limit'), usd: isCloud ? m.cost?.usd : undefined }
 }
+// A reading with no figure keeps the last one: a reload, or a fresh compaction, measures nothing yet.
+export const merge = (was: Usage, now: Usage): Usage => ({ ...was, ...Object.fromEntries(Object.entries(now).filter(([, v]) => v !== undefined)) })
 // Claude Code on the web sets CLAUDE_CODE_REMOTE in its cloud sessions; read again on each load.
 let isCloud = false
 
@@ -322,13 +324,13 @@ export const register: Register = on => {
     loop($)
     isCloud = (await $.env.get('CLAUDE_CODE_REMOTE')) === 'true'
     const now = await $.session.usage()
-    await update($, usage, () => usageOf(now, isCloud))
+    await update($, usage, was => merge(was, usageOf(now, isCloud)))
     return next(e)
   })
 
   // The meter follows the engine's own measurements.
   on('session.measure', async ($, e, next) => {
-    await update($, usage, () => usageOf(e, isCloud))
+    await update($, usage, was => merge(was, usageOf(e, isCloud)))
     return next(e)
   })
 
