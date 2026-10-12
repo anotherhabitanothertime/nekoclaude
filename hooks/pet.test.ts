@@ -87,6 +87,18 @@ test('each spawned agent gets its own Clawd in its own colour', async ($, on) =>
   await ui.unmount()
 })
 
+test("a workflow agent with no loop id still gets a Clawd", async ($, on) => {
+  on('agent.spawn', () => ({ model: 'sonnet' }))
+  await $.agent.spawn({
+    tool_use_id: 't2', prompt: 'build it', description: 'S:finish', subagentType: 'general-purpose',
+    provider: { plugin: 'engine', tier: 'core' }, parentModel: 'opus', background: true, fork: false,
+    workflow: { runId: 'wf_abc123', agentIndex: 1 },
+  })
+  const ui = await $.ui.mount({ plugin: 'clawd-pet', surface: 'desktop', ...BAND })
+  expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toContain('S:finish')
+  await ui.unmount()
+})
+
 test("a sleeping Clawd puffs a staircase of z's past his name tag", async () => {
   const asleep = labels({ ...PET, act: 'sleep', frame: 23 }, 10, 40)
   expect(asleep.map(l => [l.row, l.col, l.text])).toEqual([[0, 11, 'Claude'], [2, 19, 'z'], [1, 20, 'z'], [0, 21, 'Z']])

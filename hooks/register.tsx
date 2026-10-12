@@ -369,9 +369,11 @@ export const register: Register = on => {
 
   // Each agent the model or a workflow starts gets a Clawd that hops out of its parent's.
   // A teammate in a terminal pane of its own runs no loop here (its id is its address).
+  // A workflow's remote agent has no loop, so no agentId: its Clawd is keyed by its place
+  // in the run. ponytail: nothing reports its end, so it leaves with the orphans after 10 quiet minutes.
   on('agent.spawn', async ($, e, next) => {
     const started = await next(e)
-    const id = started.agentId
+    const id = started.deny === undefined && (started.agentId ?? (e.workflow && `${e.workflow.runId}:${e.workflow.agentIndex}`))
     if (id && id !== started.teammateId) {
       await update($, clawds, all => ({
         ...all,
