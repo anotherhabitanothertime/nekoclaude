@@ -1,1 +1,1 @@
-{ "name": "clawd-pet", "version": "0.5.1", "description": "Clawd lives on top of the prompt box and acts out what Claude is doing, beside a usage meter (context, 5-hour limit, credits, cloud spend)", "author": { "name": "Will" }, "types": "./types/index.d.ts" }
+{ "name": "clawd-pet", "version": "0.5.2", "description": "Clawd lives on top of the prompt box and acts out what Claude is doing, beside a usage meter (context, 5-hour limit, credits, cloud spend)", "author": { "name": "Will" }, "types": "./types/index.d.ts" }

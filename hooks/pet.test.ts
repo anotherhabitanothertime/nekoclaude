@@ -109,8 +109,8 @@ test('Clawd is drawn on top of the prompt box', async $ => {
 test('the meter shows context and 5-hour use, leaving out what has no reading', async ($, on) => {
   on('session.measure', ($, e) => ({ changed: e.changed }))
   expect(meter({ ctx: 42, session: 17 })).toBe('ctx: 42% session: 17%')
-  expect(meter({ ctx: 0 })).toBe('ctx: 0%')
-  expect(meter({})).toBe('')
+  expect(meter({ ctx: 0 })).toBe('ctx: 0% session: --%')
+  expect(meter({})).toBe('ctx: --% session: --%')
   const m = { context: { percent: 42 }, rateLimits: [{ kind: 'five_hour', percentUsed: 17.4 }, { kind: 'spend_limit', percentUsed: 8 }], cost: { usd: 1.2 } }
   expect(meter(usageOf(m, true))).toBe('ctx: 42% session: 17% credits: 8% cloud: $1.20')
   expect(meter(usageOf(m, false))).toBe('ctx: 42% session: 17% credits: 8%')

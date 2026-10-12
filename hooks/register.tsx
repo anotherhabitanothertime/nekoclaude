@@ -18,11 +18,12 @@ const INK: Record<string, string> = { w: '#f2efe6', y: '#f5c542', k: '#9a9a9a', 
 const clawds = atom({ plugin: 'clawd-pet', key: 'clawds' } as const, { [MAIN]: MAIN_START } as Clawds)
 const usage = atom({ plugin: 'clawd-pet', key: 'usage' } as const, {} as Usage)
 
-// `ctx: 42% session: 17% credits: 8% cloud: $1.20`, leaving out whichever has no reading.
+// `ctx: 42% session: 17% credits: 8% cloud: $1.20`: ctx and session show `--` until
+// read, credits and cloud only once there is something to show.
 export const meter = (u: Usage) =>
   [
-    u.ctx !== undefined && `ctx: ${u.ctx}%`,
-    u.session !== undefined && `session: ${u.session}%`,
+    `ctx: ${u.ctx ?? '--'}%`,
+    `session: ${u.session ?? '--'}%`,
     u.credits !== undefined && `credits: ${u.credits}%`,
     u.usd !== undefined && `cloud: $${u.usd.toFixed(2)}`,
   ].filter(Boolean).join(' ')
@@ -230,11 +231,18 @@ const worldWidth = () => (Object.keys(widths).length ? Math.min(...Object.values
 // Ticks since the band last drew: a session nobody is looking at ticks once a
 // second (ten ticks' worth at a time) instead of ten times.
 let quiet = 0
+// The meter also reads the figures every few seconds: a host may raise no
+// session.measure (or none since a reload), and the read costs nothing.
+let sinceUsage = 0
 function loop($: EngineInterface) {
   const isWatched = quiet <= 30
   $.clock.after(isWatched ? TICK_MS : 1000, () => {
     quiet += 1
     void update($, clawds, all => tick(all, worldWidth(), isWatched ? 1 : 10))
+    if ((sinceUsage += isWatched ? 1 : 10) >= ticks(5000)) {
+      sinceUsage = 0
+      void $.session.usage().then(now => update($, usage, was => merge(was, usageOf(now, isCloud))))
+    }
     loop($)
   })
 }
