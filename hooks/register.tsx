@@ -18,13 +18,24 @@ const INK: Record<string, string> = { w: '#f2efe6', y: '#f5c542', k: '#9a9a9a', 
 const clawds = atom({ plugin: 'clawd-pet', key: 'clawds' } as const, { [MAIN]: MAIN_START } as Clawds)
 const usage = atom({ plugin: 'clawd-pet', key: 'usage' } as const, {} as Usage)
 
-// `ctx: 42% session: 17%`, leaving out whichever has no reading yet.
+// `ctx: 42% session: 17% credits: 8% cloud: $1.20`, leaving out whichever has no reading.
 export const meter = (u: Usage) =>
-  [u.ctx !== undefined && `ctx: ${u.ctx}%`, u.session !== undefined && `session: ${u.session}%`].filter(Boolean).join(' ')
-const usageOf = (m: { context: { percent?: number }; rateLimits: { kind: string; percentUsed: number }[] }): Usage => {
-  const five = m.rateLimits.find(r => r.kind === 'five_hour')
-  return { ctx: m.context.percent, session: five && Math.round(five.percentUsed) }
+  [
+    u.ctx !== undefined && `ctx: ${u.ctx}%`,
+    u.session !== undefined && `session: ${u.session}%`,
+    u.credits !== undefined && `credits: ${u.credits}%`,
+    u.usd !== undefined && `cloud: $${u.usd.toFixed(2)}`,
+  ].filter(Boolean).join(' ')
+type Measured = { context: { percent?: number }; rateLimits: { kind: string; percentUsed: number }[]; cost?: { usd: number } }
+export const usageOf = (m: Measured, isCloud: boolean): Usage => {
+  const used = (kind: string) => {
+    const r = m.rateLimits.find(r => r.kind === kind)
+    return r && Math.round(r.percentUsed)
+  }
+  return { ctx: m.context.percent, session: used('five_hour'), credits: used('spend_limit'), usd: isCloud ? m.cost?.usd : undefined }
 }
+// Claude Code on the web sets CLAUDE_CODE_REMOTE in its cloud sessions; read again on each load.
+let isCloud = false
 
 // Clawd's pixels: the welcome-screen logo taken apart into rows, 18 wide.
 // LOOK, STEP and every prop face right; dir -1 mirrors every row.
@@ -309,14 +320,15 @@ export const register: Register = on => {
       ...Object.fromEntries(Object.entries(all).map(([id, p]) => [id, { ...START, ...p }])),
     }))
     loop($)
+    isCloud = (await $.env.get('CLAUDE_CODE_REMOTE')) === 'true'
     const now = await $.session.usage()
-    await update($, usage, () => usageOf(now))
+    await update($, usage, () => usageOf(now, isCloud))
     return next(e)
   })
 
   // The meter follows the engine's own measurements.
   on('session.measure', async ($, e, next) => {
-    await update($, usage, () => usageOf(e))
+    await update($, usage, () => usageOf(e, isCloud))
     return next(e)
   })
 

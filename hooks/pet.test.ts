@@ -1,7 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 
 import type { Pet } from '../types'
-import { cellsOf, doing, labels, meter, pose, shown, step, tick, toBlocks, zzz } from './register'
+import { cellsOf, doing, labels, meter, pose, usageOf, shown, step, tick, toBlocks, zzz } from './register'
 
 const BAND = {
   component: 'AbovePrompt',
@@ -111,6 +111,9 @@ test('the meter shows context and 5-hour use, leaving out what has no reading', 
   expect(meter({ ctx: 42, session: 17 })).toBe('ctx: 42% session: 17%')
   expect(meter({ ctx: 0 })).toBe('ctx: 0%')
   expect(meter({})).toBe('')
+  const m = { context: { percent: 42 }, rateLimits: [{ kind: 'five_hour', percentUsed: 17.4 }, { kind: 'spend_limit', percentUsed: 8 }], cost: { usd: 1.2 } }
+  expect(meter(usageOf(m, true))).toBe('ctx: 42% session: 17% credits: 8% cloud: $1.20')
+  expect(meter(usageOf(m, false))).toBe('ctx: 42% session: 17% credits: 8%')
   await $.session.measure({ context: { window: 200000, tokens: 84000, percent: 42 }, rateLimits: [{ kind: 'five_hour', percentUsed: 17.4 }], changed: ['context', 'rateLimits'] })
   const ui = await $.ui.mount({ plugin: 'clawd-pet', surface: 'terminal', ...BAND })
   expect(await ui.find({ type: 'Text', text: /ctx: 42% session: 17%/ })).toBeDefined()
