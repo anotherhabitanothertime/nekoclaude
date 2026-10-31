@@ -1,7 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 
 import type { Pet } from '../types'
-import { cellsOf, doing, labels, merge, meter, pose, usageOf, shown, step, tick, toBlocks, zzz } from './register'
+import { cellsOf, doing, labels, merge, meter, newcomer, pose, usageOf, shown, step, tick, toBlocks, zzz } from './register'
 
 const BAND = {
   component: 'AbovePrompt',
@@ -42,10 +42,22 @@ test('agents act out what their tools do', async () => {
   expect(cellsOf(pose({ ...PET, act: 'bash' })).flat().some(c => c.ink === 'k')).toBe(true)
 })
 
-test('a hat sits on the head, and comes off for a jump', async () => {
-  const hatted = pose({ ...PET, act: 'look', hat: 0 })
-  expect(hatted.slice(0, 2).join('')).toContain('y')
-  expect(pose({ ...PET, act: 'look' }).slice(0, 2).join('')).not.toContain('y')
+test('a buddy grows a rounder head and its own ears, and keeps them for a jump', async () => {
+  const buddy = pose({ ...PET, act: 'look', hat: 0 })
+  expect(buddy.slice(0, 2).join('')).toContain('X')
+  expect(buddy[2]).toBe('....XXXXXXXXXX....')
+  expect(pose({ ...PET, act: 'look' }).slice(0, 2).join('')).not.toContain('X')
+  expect(pose({ ...PET, act: 'look' })[2]).toBe('...XXXXXXXXXXXX...')
+  expect(pose({ ...PET, act: 'jump', hat: 0 })[0]).toBe('....XX......XX....')
+})
+
+test('a full band of buddies never wears the same look twice', async () => {
+  const all: Record<string, Pet> = { main: PET }
+  for (let i = 0; i < 16; i++) all[`a${i}`] = newcomer(all, `agent ${i}`, 0)
+  const buddies = Object.values(all).filter(p => p.hat >= 0)
+  expect(new Set(buddies.map(p => p.color)).size).toBe(8)
+  expect(new Set(buddies.map(p => `${p.color}${p.hat}`)).size).toBe(16)
+  expect(new Set(buddies.slice(0, 8).map(p => p.hat)).size).toBe(8)
 })
 
 test("a subagent's Clawd says goodbye, then leaves", async () => {
@@ -74,6 +86,25 @@ test('a workflow-sized crowd settles: no more than fit are drawn, and they stop 
   expect(JSON.stringify(Object.values(all).map(p => p.x))).toBe(before)
 })
 
+test('drawn Clawds never overlap, however a full band churns', async () => {
+  const acts = ['walk', 'sit', 'think', 'bash', 'read'] as const
+  let all: Record<string, Pet> = { main: { ...PET, act: 'walk', left: 99999, x: 30 } }
+  for (let i = 0; i < 9; i++) all[`a${i}`] = { ...PET, act: acts[i % acts.length]!, left: 99999, busy: true, x: (i * 11) % 70, idle: i, name: `verify:${i}`, dir: i % 2 ? 1 : -1, style: i % 3 }
+  for (let t = 0; t < 3000; t++) {
+    // a tool call somewhere: a hidden Clawd comes back in, wherever it last stood
+    const id = `a${Math.floor(Math.random() * 9)}`
+    all = tick({ ...all, [id]: { ...all[id]!, idle: 0 } }, 80)
+    const xs = [...shown(all, 80)].map(k => all[k]!.x).sort((a, b) => a - b)
+    xs.forEach((x, i) => i && expect(x - xs[i - 1]!).toBeGreaterThanOrEqual(9))
+  }
+})
+
+test('a walker turns back from a sitting Clawd instead of shoving it along', async () => {
+  let all: Record<string, Pet> = { main: { ...PET, act: 'sit', left: 99999, x: 40 }, a1: { ...PET, act: 'walk', left: 99999, x: 20, name: 'walker' } }
+  for (let i = 0; i < 2000; i++) all = tick(all, 80)
+  expect(all.main!.x).toBe(40)
+})
+
 test('each spawned agent gets its own Clawd in its own colour', async ($, on) => {
   on('agent.spawn', () => ({ model: 'haiku', agentId: 'a1' }))
   await $.agent.spawn({
@@ -82,7 +113,7 @@ test('each spawned agent gets its own Clawd in its own colour', async ($, on) =>
   })
   const ui = await $.ui.mount({ plugin: 'clawd-pet', surface: 'desktop', ...BAND })
   const source = String((await ui.find({ type: 'Svg' }))?.props.source)
-  expect(source).toContain('fill="#5b9bd5"')
+  expect(source).toContain('fill="#6e9ec7"')
   expect(source).toContain('Find bugs')
   await ui.unmount()
 })

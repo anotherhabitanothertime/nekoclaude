@@ -11,10 +11,10 @@ const MAIN = 'main' // the main loop's Clawd; each subagent's is keyed by its ag
 const START: Pet = { x: 0, dir: 1, act: 'walk', left: ticks(4000), frame: 0, say: '', sayLeft: 0, idle: 0, busy: false, color: '#d77757', name: 'Claude', style: 0, hat: -1 }
 // The main Clawd naps until you start typing.
 const MAIN_START: Pet = { ...START, act: 'sleep', left: 0 }
-// Each subagent's Clawd takes the first colour no live Clawd wears.
-const PALETTE = ['#5b9bd5', '#6abf69', '#b07cd8', '#e5b84b', '#e06c9f', '#4fbfb5']
+// Each subagent's Clawd takes the colour fewest live Clawds wear.
+const PALETTE = ['#6e9ec7', '#79a67a', '#c0849b', '#af955d', '#a78bbe', '#56a8a7', '#8a95ca', '#969e64']
 // Prop colours, by the letter a pose paints them with; 'X' is the Clawd's own colour.
-const INK: Record<string, string> = { w: '#f2efe6', y: '#f5c542', k: '#9a9a9a', g: '#7bd88f', c: '#9fd3ff', r: '#e5534b', d: '#1e2b22' }
+const INK: Record<string, string> = { w: '#e8e2d4', y: '#d9b870', k: '#8c9099', g: '#93bb86', c: '#a5c4d8', d: '#20262b' }
 const clawds = atom({ plugin: 'clawd-pet', key: 'clawds' } as const, { [MAIN]: MAIN_START } as Clawds)
 const usage = atom({ plugin: 'clawd-pet', key: 'usage' } as const, {} as Usage)
 
@@ -73,14 +73,17 @@ const paint = (rows: string[], ...marks: Mark[]) =>
 // Which of n phases, each `period` ms long, time t falls in.
 const ph = (t: number, period: number, n: number) => Math.floor(t / period) % n
 
-// Hats, so agents can be told apart at a glance: two rows that sit on the head.
+// What grows out of a buddy's head, so agents can be told apart at a glance: two
+// rows in its own colour, so the head's cell never has to pick between two inks.
 const HATS: [string, string][] = [
-  ['........yy........', '.......yyyy.......'], // party hat
-  ['......kkkkkk......', '....kkkkkkkkkk....'], // top hat
-  ['........ww........', '.....rrrrrrrr.....'], // beanie
-  ['.........y........', '.........k........'], // antenna
-  ['......y.yy.y......', '......yyyyyy......'], // crown
-  ['.........rr.rr....', '..........rrr.....'], // bow
+  ['....X........X....', '....XX......XX....'], // cat
+  ['.....XX....XX.....', '.....XX....XX.....'], // rabbit
+  ['.....X......X.....', '......X....X......'], // antennae
+  ['...X..........X...', '...XX........XX...'], // horns
+  ['.......XX.XX......', '.........X........'], // sprout
+  ['.......X.X.X......', '.......XXXXX......'], // crest
+  ['..........XX......', '........XXX.......'], // curl
+  ['..................', '....XXX....XXX....'], // bear
 ]
 
 const stand = (eyes = LOOK, legs = LEGS) => at(2, [TOP, eyes, ARMS, BODY, legs])
@@ -92,7 +95,7 @@ const POSES: Record<Act, (t: number, p: Pet) => string[]> = {
   look: t => stand(ph(t, 1500, 2) ? BACK : LOOK),
   sit: t => at(4, [TOP, t % 5000 < 200 ? SHUT : LOOK, ARMS, BODY]),
   sleep: t => at(4, [TOP, SHUT, ph(t, 1000, 2) ? DROOP : ARMS, BODY]),
-  jump: t => (ph(t, 250, 2) ? stand() : at(0, [CHEER, CHEER_EYES, ARMS, BODY, STEP])),
+  jump: (t, p) => (ph(t, 250, 2) ? stand() : at(p.hat < 0 ? 0 : 1, [CHEER, CHEER_EYES, ARMS, BODY, STEP])),
   sad: t => at(2, [TOP, t % 2500 < 500 ? SHUT : EYES, DROOP, BODY, LEGS]),
   // Thinking three ways: pacing (style 0), pondering on the spot (1), tapping a foot (2).
   think: (t, p) => stand(ph(t, 1200, 2) ? BACK : LOOK, p.style !== 1 && ph(t, p.style === 2 ? 150 : 400, 2) ? STEP : LEGS),
@@ -120,8 +123,12 @@ const POSES: Record<Act, (t: number, p: Pet) => string[]> = {
 export const pose = (p: Pet) => {
   let rows = POSES[p.act](p.frame * TICK_MS, p)
   const hat = HATS[p.hat]
-  const head = rows.findIndex(r => r.includes('X'))
-  if (hat && head >= 2) rows = paint(rows, [head - 2, 0, hat[0]], [head - 1, 0, hat[1]])
+  if (hat) {
+    // A buddy's head is rounder than the logo's: its top corners come off, then its ears go on.
+    const head = rows.findIndex(r => r.includes('X'))
+    rows = rows.map((r, y) => (y === head ? [...r].map((ch, i) => ((i === 3 || i === 14) && ch === 'X' ? '.' : ch)).join('') : r))
+    rows = paint(rows, [head - 2, 0, hat[0]], [head - 1, 0, hat[1]])
+  }
   return p.dir < 0 ? rows.map(r => [...r].reverse().join('')) : rows
 }
 
@@ -201,25 +208,40 @@ export const shown = (all: Clawds, width: number) =>
 // six times longer while one of its tool calls is still running.
 const isAlive = (id: string, p: Pet) => id === MAIN || p.idle < (p.inTool ? ORPHAN_TICKS * 6 : ORPHAN_TICKS)
 
+// Where each drawn Clawd stands: in its order along the band, every pair spacing
+// apart (room apart when the band is too crowded for that), moved no further than
+// that takes. `shown` fits a body in room however full the band, so none can overlap.
+export const placed = (crowd: (readonly [string, Pet])[], max: number) => {
+  const row = [...crowd].sort(([a, p], [b, q]) => p.x - q.x || (a < b ? -1 : 1))
+  const room = Math.floor(max / Math.max(1, row.length - 1))
+  const gap = (i: number) => Math.min(spacing(row[i - 1]![1], row[i]![1]), room)
+  const xs = row.map(([, p]) => p.x)
+  for (let i = 1; i < xs.length; i++) xs[i] = Math.max(xs[i]!, xs[i - 1]! + gap(i))
+  if (xs.length) xs[xs.length - 1] = Math.min(xs[xs.length - 1]!, max)
+  for (let i = xs.length - 1; i > 0; i--) xs[i - 1] = Math.min(xs[i - 1]!, xs[i]! - gap(i))
+  const close = (i: number) => i > 0 && i < row.length && row[i]![1].x - row[i - 1]![1].x < gap(i)
+  return new Map(row.map(([id], i) => [id, { x: xs[i]!, ahead: close(i + 1), behind: close(i) }]))
+}
+
 // `n` ticks for everyone; a subagent's Clawd leaves once its goodbye is over or
-// its agent has gone quiet. A drawn Clawd too close to another scoots a column
-// away; a walker turns back, or stops when the band is too crowded to turn.
+// its agent has gone quiet. A walker that meets another turns back where it
+// stood, so nobody gets shoved along, and every drawn Clawd takes its place.
 export function tick(all: Clawds, width: number, n = 1): Clawds {
   const kept = Object.entries(all)
     .filter(([id, p]) => !(p.bye && p.left <= 0) && isAlive(id, p))
     .map(([id, p]) => [id, step(p, width, n)] as const)
   const drawn = shown(Object.fromEntries(kept), width)
-  const crowd = kept.filter(([id]) => drawn.has(id))
   const max = Math.max(0, width - 9)
-  const room = Math.floor(max / Math.max(1, crowd.length - 1))
+  const met = placed(kept.filter(([id]) => drawn.has(id)), max)
+  const held = kept.map(([id, p]) => {
+    const spot = met.get(id)
+    return [id, spot && PACE[p.act] !== undefined && (p.dir > 0 ? spot.ahead : spot.behind) ? { ...p, x: all[id]!.x, dir: -p.dir } : p] as const
+  })
+  const spots = placed(held.filter(([id]) => drawn.has(id)), max)
   return Object.fromEntries(
-    kept.map(([id, p]) => {
-      const near = drawn.has(id) && crowd.find(([other, q]) => other !== id && Math.abs(q.x - p.x) < Math.min(spacing(p, q), room))
-      if (!near) return [id, p]
-      const away = p.x === near[1].x ? (id < near[0] ? -1 : 1) : Math.sign(p.x - near[1].x)
-      const isMoving = PACE[p.act] !== undefined
-      const halt: Partial<Pet> = isMoving && room < 9 ? { act: p.busy ? 'think' : 'look', left: ticks(2000) } : {}
-      return [id, { ...p, ...halt, x: Math.min(Math.max(p.x + away, 0), max), dir: isMoving ? away : p.dir }]
+    held.map(([id, p]) => {
+      const x = spots.get(id)?.x ?? p.x
+      return [id, { ...p, x, dir: PACE[p.act] !== undefined && x !== p.x ? Math.sign(x - p.x) : p.dir }]
     }),
   )
 }
@@ -247,15 +269,19 @@ function loop($: EngineInterface) {
   })
 }
 
-// A subagent's Clawd hops out near its parent's, in the first colour and hat
-// no live Clawd wears, with a way of thinking of its own.
-const newcomer = (all: Clawds, name: string, near: number): Pet => {
-  const hats = HATS.map((_, i) => i).filter(i => !Object.values(all).some(p => p.hat === i))
+// The xs used least by the given count, in their order.
+const rarest = <T,>(xs: T[], uses: (x: T) => number) => xs.filter(x => uses(x) === Math.min(...xs.map(uses)))
+
+// A subagent's Clawd hops out near its parent's, in the least worn colour and top,
+// a pairing no live Clawd has while any is left, with a way of thinking of its own.
+export const newcomer = (all: Clawds, name: string, near: number): Pet => {
+  const live = Object.values(all)
+  const color = rarest(PALETTE, c => live.filter(p => p.color === c).length)[0]!
   return {
     ...START,
     name: name.length > 16 ? `${name.slice(0, 15)}…` : name,
-    color: PALETTE.find(c => !Object.values(all).some(p => p.color === c)) ?? pick(...PALETTE),
-    hat: hats.length ? pick(...hats) : between(0, HATS.length),
+    color,
+    hat: pick(...rarest(HATS.map((_, i) => i), i => live.reduce((n, p) => n + (p.hat !== i ? 0 : p.color === color ? 9 : 1), 0))),
     style: between(0, 3),
     x: Math.max(0, near + between(-8, 9)),
     dir: pick(1, -1),
@@ -401,11 +427,13 @@ export const register: Register = on => {
     const all = await read($, clawds)
     const drawn = shown(all, width)
     const hidden = Object.keys(all).length - drawn.size
-    // subagents first so the main Clawd is drawn on top
+    // The ticker places Clawds for the narrowest surface; this one may draw more.
+    const spots = placed(Object.entries(all).filter(([id]) => drawn.has(id)), width - 9)
+    // subagents first so the main Clawd's labels go first
     const crowd = Object.entries(all)
       .filter(([id]) => drawn.has(id))
       .sort(([a], [b]) => Number(a === MAIN) - Number(b === MAIN))
-      .map(([id, p]) => ({ id, p, x: Math.min(p.x, width - 9), px: pose(p) }))
+      .map(([id, p]) => ({ id, p, x: spots.get(id)!.x, px: pose(p) }))
 
     // Band row 0 holds name tags, rows 1-4 the world. Bodies go down first; then
     // the "+N" of Clawds not drawn, then labels, main's first. A tag slides at
@@ -419,14 +447,14 @@ export const register: Register = on => {
         }),
       )
     }
-    const placed: (Label & { color: string })[] = []
+    const written: (Label & { color: string })[] = []
     // Top right, dim: the "+N" of Clawds not drawn, then the usage meter left of it.
     let right = width
     for (const text of [hidden > 0 ? `+${hidden}` : '', meter(await read($, usage))]) {
       const col = right - text.length - (right < width ? 1 : 0)
       if (!text || col < 0) continue
       ;[...text].forEach((ch, i) => (grid[0]![col + i] = { ch, kind: 'tag', color: '#8a8a8a' }))
-      placed.push({ row: 0, col, text, kind: 'tag', color: '#8a8a8a' })
+      written.push({ row: 0, col, text, kind: 'tag', color: '#8a8a8a' })
       right = col
     }
     const reach = Math.min(10, Math.max(1, Math.floor(width / crowd.length / 2)))
@@ -439,7 +467,7 @@ export const register: Register = on => {
         const col = shifts.map(d => l.col + d).find(free)
         if (col === undefined) continue
         ;[...l.text].forEach((ch, i) => (line[col + i] = { ch, kind: l.kind, color: c.p.color }))
-        placed.push({ ...l, col, color: c.p.color })
+        written.push({ ...l, col, color: c.p.color })
       }
     }
 
@@ -473,7 +501,7 @@ export const register: Register = on => {
 
     const { Svg } = $.ui.resolve(e)
     const bodies = crowd.map(c => rects(1, c.x, c.px, c.p.color))
-    const texts = placed.map(
+    const texts = written.map(
       l =>
         `<text x="${l.col * 2}" y="${l.row * 4 + 3.2}" font-size="3" fill="${l.color}" font-family="SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace"${l.kind === 'say' ? ' font-style="italic"' : ' opacity="0.7"'}>${esc(l.text)}</text>`,
     )

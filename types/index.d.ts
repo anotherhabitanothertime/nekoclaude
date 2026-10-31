@@ -12,7 +12,7 @@ export type Pet = {
   color: string
   name: string
   style: number // how this Clawd thinks: 0 paces, 1 ponders, 2 taps a foot
-  hat: number // index into the hats; -1 for none (the main Clawd)
+  hat: number // index into the ears and tops a buddy grows; -1 for none (the main Clawd)
   bye?: boolean
   inTool?: boolean // a tool call is running: a long one is no sign the agent died
   teammate?: boolean // a teammate goes idle between turns instead of leaving
