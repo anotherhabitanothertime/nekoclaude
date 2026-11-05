@@ -111,7 +111,7 @@ test('each spawned agent gets its own Clawd in its own colour', async ($, on) =>
     tool_use_id: 't1', prompt: 'look around', description: 'Find bugs', subagentType: 'Explore',
     provider: { plugin: 'engine', tier: 'core' }, parentModel: 'opus', background: true, fork: false,
   })
-  const ui = await $.ui.mount({ plugin: 'clawd-pet', surface: 'desktop', ...BAND })
+  const ui = await $.ui.mount({ plugin: 'nekoclaude', surface: 'desktop', ...BAND })
   const source = String((await ui.find({ type: 'Svg' }))?.props.source)
   expect(source).toContain('fill="#6e9ec7"')
   expect(source).toContain('Find bugs')
@@ -125,7 +125,7 @@ test("a workflow agent with no loop id still gets a Clawd", async ($, on) => {
     provider: { plugin: 'engine', tier: 'core' }, parentModel: 'opus', background: true, fork: false,
     workflow: { runId: 'wf_abc123', agentIndex: 1 },
   })
-  const ui = await $.ui.mount({ plugin: 'clawd-pet', surface: 'desktop', ...BAND })
+  const ui = await $.ui.mount({ plugin: 'nekoclaude', surface: 'desktop', ...BAND })
   expect(String((await ui.find({ type: 'Svg' }))?.props.source)).toContain('S:finish')
   await ui.unmount()
 })
@@ -138,7 +138,7 @@ test("a sleeping Clawd puffs a staircase of z's past his name tag", async () => 
 
 test('Clawd is drawn on top of the prompt box', async $ => {
   for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ plugin: 'clawd-pet', surface, ...BAND })
+    const ui = await $.ui.mount({ plugin: 'nekoclaude', surface, ...BAND })
     if (surface === 'terminal') {
       expect(await ui.find({ type: 'Text', text: /█/ })).toBeDefined()
       expect(await ui.find({ type: 'Text', text: 'Claude' })).toBeDefined()
@@ -154,12 +154,12 @@ test('the meter shows context and 5-hour use, leaving out what has no reading', 
   expect(meter({ ctx: 42, session: 17 })).toBe('ctx: 42% session: 17%')
   expect(meter({ ctx: 0 })).toBe('ctx: 0% session: --%')
   expect(meter({})).toBe('ctx: --% session: --%')
-  const m = { context: { percent: 42 }, rateLimits: [{ kind: 'five_hour', percentUsed: 17.4 }, { kind: 'spend_limit', percentUsed: 8 }], cost: { usd: 1.2 } }
-  expect(meter(usageOf(m, true))).toBe('ctx: 42% session: 17% credits: 8% cloud: $1.20')
-  expect(meter(usageOf(m, false))).toBe('ctx: 42% session: 17% credits: 8%')
+  const m = { context: { percent: 42 }, rateLimits: [{ kind: 'five_hour', percentUsed: 17.4 }, { kind: 'seven_day', percentUsed: 30.2 }, { kind: 'spend_limit', percentUsed: 8 }], cost: { usd: 1.2 } }
+  expect(meter(usageOf(m, true))).toBe('ctx: 42% session: 17% week: 30% credits: 8% cloud: $1.20')
+  expect(meter(usageOf(m, false))).toBe('ctx: 42% session: 17% week: 30% credits: 8%')
   expect(meter(merge({ ctx: 42, session: 17 }, usageOf({ context: {}, rateLimits: [] }, false)))).toBe('ctx: 42% session: 17%')
   await $.session.measure({ context: { window: 200000, tokens: 84000, percent: 42 }, rateLimits: [{ kind: 'five_hour', percentUsed: 17.4 }], changed: ['context', 'rateLimits'] })
-  const ui = await $.ui.mount({ plugin: 'clawd-pet', surface: 'terminal', ...BAND })
+  const ui = await $.ui.mount({ plugin: 'nekoclaude', surface: 'terminal', ...BAND })
   expect(await ui.find({ type: 'Text', text: /ctx: 42% session: 17%/ })).toBeDefined()
   await ui.unmount()
 })
