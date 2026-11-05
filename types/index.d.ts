@@ -19,9 +19,9 @@ export type Pet = {
 }
 // One Clawd per agent loop: 'main' for the main one, a subagent's by its agentId.
 export type Clawds = Record<string, Pet>
-// The context window's fill, the 5-hour, weekly and spend limits' use, as whole
+// The context window's fill, the 5-hour limit's and the spend limit's use, as whole
 // percents, and in a cloud session its spend in dollars; each absent until known.
-export type Usage = { ctx?: number; session?: number; week?: number; credits?: number; usd?: number }
+export type Usage = { ctx?: number; session?: number; credits?: number; usd?: number }
 
 declare module 'claude-code' {
   interface PluginState {

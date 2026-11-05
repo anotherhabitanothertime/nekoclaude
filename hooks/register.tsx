@@ -18,13 +18,12 @@ const INK: Record<string, string> = { w: '#e8e2d4', y: '#d9b870', k: '#8c9099', 
 const clawds = atom({ plugin: 'nekoclaude', key: 'clawds' } as const, { [MAIN]: MAIN_START } as Clawds)
 const usage = atom({ plugin: 'nekoclaude', key: 'usage' } as const, {} as Usage)
 
-// `ctx: 42% session: 17% week: 30% credits: 8% cloud: $1.20`: ctx and session show `--`
-// until read, week, credits and cloud only once there is something to show.
+// `ctx: 42% session: 17% credits: 8% cloud: $1.20`: ctx and session show `--` until
+// read, credits and cloud only once there is something to show.
 export const meter = (u: Usage) =>
   [
     `ctx: ${u.ctx ?? '--'}%`,
     `session: ${u.session ?? '--'}%`,
-    u.week !== undefined && `week: ${u.week}%`,
     u.credits !== undefined && `credits: ${u.credits}%`,
     u.usd !== undefined && `cloud: $${u.usd.toFixed(2)}`,
   ].filter(Boolean).join(' ')
@@ -34,7 +33,7 @@ export const usageOf = (m: Measured, isCloud: boolean): Usage => {
     const r = m.rateLimits.find(r => r.kind === kind)
     return r && Math.round(r.percentUsed)
   }
-  return { ctx: m.context.percent, session: used('five_hour'), week: used('seven_day'), credits: used('spend_limit'), usd: isCloud ? m.cost?.usd : undefined }
+  return { ctx: m.context.percent, session: used('five_hour'), credits: used('spend_limit'), usd: isCloud ? m.cost?.usd : undefined }
 }
 // A reading with no figure keeps the last one: a reload, or a fresh compaction, measures nothing yet.
 export const merge = (was: Usage, now: Usage): Usage => ({ ...was, ...Object.fromEntries(Object.entries(now).filter(([, v]) => v !== undefined)) })
