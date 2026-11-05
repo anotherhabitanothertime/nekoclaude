@@ -154,9 +154,9 @@ test('the meter shows context and 5-hour use, leaving out what has no reading', 
   expect(meter({ ctx: 42, session: 17 })).toBe('ctx: 42% session: 17%')
   expect(meter({ ctx: 0 })).toBe('ctx: 0% session: --%')
   expect(meter({})).toBe('ctx: --% session: --%')
-  const m = { context: { percent: 42 }, rateLimits: [{ kind: 'five_hour', percentUsed: 17.4 }, { kind: 'spend_limit', percentUsed: 8 }], cost: { usd: 1.2 } }
-  expect(meter(usageOf(m, true))).toBe('ctx: 42% session: 17% credits: 8% cloud: $1.20')
-  expect(meter(usageOf(m, false))).toBe('ctx: 42% session: 17% credits: 8%')
+  const m = { context: { percent: 42 }, rateLimits: [{ kind: 'five_hour', percentUsed: 17.4 }, { kind: 'seven_day', percentUsed: 30.2 }, { kind: 'spend_limit', percentUsed: 8 }], cost: { usd: 1.2 } }
+  expect(meter(usageOf(m, true))).toBe('ctx: 42% session: 17% wk: 30% credits: 8% cloud: $1.20')
+  expect(meter(usageOf(m, false))).toBe('ctx: 42% session: 17% wk: 30% credits: 8%')
   expect(meter(merge({ ctx: 42, session: 17 }, usageOf({ context: {}, rateLimits: [] }, false)))).toBe('ctx: 42% session: 17%')
   await $.session.measure({ context: { window: 200000, tokens: 84000, percent: 42 }, rateLimits: [{ kind: 'five_hour', percentUsed: 17.4 }], changed: ['context', 'rateLimits'] })
   const ui = await $.ui.mount({ plugin: 'nekoclaude', surface: 'terminal', ...BAND })

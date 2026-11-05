@@ -18,12 +18,13 @@ const INK: Record<string, string> = { w: '#e8e2d4', y: '#d9b870', k: '#8c9099', 
 const clawds = atom({ plugin: 'nekoclaude', key: 'clawds' } as const, { [MAIN]: MAIN_START } as Clawds)
 const usage = atom({ plugin: 'nekoclaude', key: 'usage' } as const, {} as Usage)
 
-// `ctx: 42% session: 17% credits: 8% cloud: $1.20`: ctx and session show `--` until
-// read, credits and cloud only once there is something to show.
+// `ctx: 42% session: 17% wk: 30% credits: 8% cloud: $1.20`: ctx and session show `--`
+// until read, wk, credits and cloud only once there is something to show.
 export const meter = (u: Usage) =>
   [
     `ctx: ${u.ctx ?? '--'}%`,
     `session: ${u.session ?? '--'}%`,
+    u.week !== undefined && `wk: ${u.week}%`,
     u.credits !== undefined && `credits: ${u.credits}%`,
     u.usd !== undefined && `cloud: $${u.usd.toFixed(2)}`,
   ].filter(Boolean).join(' ')
@@ -33,7 +34,7 @@ export const usageOf = (m: Measured, isCloud: boolean): Usage => {
     const r = m.rateLimits.find(r => r.kind === kind)
     return r && Math.round(r.percentUsed)
   }
-  return { ctx: m.context.percent, session: used('five_hour'), credits: used('spend_limit'), usd: isCloud ? m.cost?.usd : undefined }
+  return { ctx: m.context.percent, session: used('five_hour'), week: used('seven_day'), credits: used('spend_limit'), usd: isCloud ? m.cost?.usd : undefined }
 }
 // A reading with no figure keeps the last one: a reload, or a fresh compaction, measures nothing yet.
 export const merge = (was: Usage, now: Usage): Usage => ({ ...was, ...Object.fromEntries(Object.entries(now).filter(([, v]) => v !== undefined)) })
@@ -427,6 +428,7 @@ export const register: Register = on => {
     const all = await read($, clawds)
     const drawn = shown(all, width)
     const hidden = Object.keys(all).length - drawn.size
+    const cols = Math.max(width, e.props.bodyColumns) // the meter sits at the box's real right edge
     // The ticker places Clawds for the narrowest surface; this one may draw more.
     const spots = placed(Object.entries(all).filter(([id]) => drawn.has(id)), width - 9)
     // subagents first so the main Clawd's labels go first
@@ -439,7 +441,7 @@ export const register: Register = on => {
     // the "+N" of Clawds not drawn, then labels, main's first. A tag slides at
     // most half the room each Clawd has, so it stays over its own body; any
     // other label is left out where it would touch something already drawn.
-    const grid: Cell[][] = Array.from({ length: 5 }, () => Array.from({ length: width }, (): Cell => ({ ch: ' ', kind: 'none' })))
+    const grid: Cell[][] = Array.from({ length: 5 }, () => Array.from({ length: cols }, (): Cell => ({ ch: ' ', kind: 'none' })))
     for (const c of crowd) {
       cellsOf(c.px).forEach((line, y) =>
         line.forEach((cell, i) => {
@@ -447,14 +449,14 @@ export const register: Register = on => {
         }),
       )
     }
-    const written: (Label & { color: string })[] = []
+    const written: (Label & { color: string; end?: boolean })[] = []
     // Top right, dim: the "+N" of Clawds not drawn, then the usage meter left of it.
-    let right = width
+    let right = cols
     for (const text of [hidden > 0 ? `+${hidden}` : '', meter(await read($, usage))]) {
-      const col = right - text.length - (right < width ? 1 : 0)
+      const col = right - text.length - (right < cols ? 1 : 0)
       if (!text || col < 0) continue
       ;[...text].forEach((ch, i) => (grid[0]![col + i] = { ch, kind: 'tag', color: '#8a8a8a' }))
-      written.push({ row: 0, col, text, kind: 'tag', color: '#8a8a8a' })
+      written.push({ row: 0, col, text, kind: 'tag', color: '#8a8a8a', end: true })
       right = col
     }
     const reach = Math.min(10, Math.max(1, Math.floor(width / crowd.length / 2)))
@@ -503,9 +505,9 @@ export const register: Register = on => {
     const bodies = crowd.map(c => rects(1, c.x, c.px, c.p.color))
     const texts = written.map(
       l =>
-        `<text x="${l.col * 2}" y="${l.row * 4 + 3.2}" font-size="3" fill="${l.color}" font-family="SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace"${l.kind === 'say' ? ' font-style="italic"' : ' opacity="0.7"'}>${esc(l.text)}</text>`,
+        `<text x="${(l.col + (l.end ? l.text.length : 0)) * 2}"${l.end ? ' text-anchor="end"' : ''} y="${l.row * 4 + 3.2}" font-size="3" fill="${l.color}" font-family="SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace"${l.kind === 'say' ? ' font-style="italic"' : ' opacity="0.7"'}>${esc(l.text)}</text>`,
     )
-    const source = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width * 2} 20" width="${width * 8}" height="80" shape-rendering="crispEdges">${bodies.join('')}${texts.join('')}</svg>`
+    const source = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${cols * 2} 20" width="${cols * 8}" height="80" shape-rendering="crispEdges">${bodies.join('')}${texts.join('')}</svg>`
     const alt = crowd.map(c => `${c.p.name} is ${c.p.act === 'walk' ? 'wandering' : c.p.act === 'sleep' ? 'asleep' : c.p.act}`).join(', ')
     return <Svg source={source} alt={hidden > 0 ? `${alt}, and ${hidden} more` : alt} />
   })
